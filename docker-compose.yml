@@ -1,0 +1,15 @@
+---
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: rent4goods
+      POSTGRES_PASSWORD: rent4goods
+      POSTGRES_DB: rent4goods
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
