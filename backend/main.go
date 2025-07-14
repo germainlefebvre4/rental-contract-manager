@@ -45,10 +45,28 @@ func seedDatabase(db *gorm.DB) error {
 			BirthDate:     "1990-01-01",
 			PhoneNumber:   "+1234567890",
 			Email:         "admin@example.com",
+			Kind:          "admin",
 		}
 
 		if err := db.Create(&adminUser).Error; err != nil {
 			log.Printf("Error seeding admin user: %v", err)
+			return err
+		}
+
+		// Example renter user
+		renterUser := models.User{
+			FirstName:     "John",
+			LastName:      "Doe",
+			PostalAddress: "456 Main St",
+			City:          "Sample City",
+			BirthDate:     "1995-05-15",
+			PhoneNumber:   "+9876543210",
+			Email:         "john.doe@example.com",
+			Kind:          "renter",
+		}
+
+		if err := db.Create(&renterUser).Error; err != nil {
+			log.Printf("Error seeding renter user: %v", err)
 			return err
 		}
 

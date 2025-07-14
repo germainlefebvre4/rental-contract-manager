@@ -13,20 +13,22 @@ var (
 )
 
 type Contract struct {
-	ID             uint      `gorm:"primaryKey" json:"id"`
-	ProductID      uint      `json:"productId"`
-	Product        Product   `json:"product" gorm:"foreignKey:ProductID"`
-	UserID         uint      `json:"userId"`
-	User           User      `json:"user" gorm:"foreignKey:UserID"`
-	Quantity       int       `json:"quantity"`
-	RentalDuration int       `json:"rentalDuration"` // in days
-	TotalAmount    float64   `json:"totalAmount"`
-	StateBefore    string    `json:"stateBefore"`
-	StateAfter     string    `json:"stateAfter"`
-	UsageDate      time.Time `json:"usageDate"`
-	RetrievalDate  time.Time `json:"retrievalDate"`
-	StartDate      time.Time `json:"startDate"`
-	EndDate        time.Time `json:"endDate"`
+	ID                 uint      `gorm:"primaryKey" json:"id"`
+	ProductID          uint      `json:"productId"`
+	Product            Product   `json:"product" gorm:"foreignKey:ProductID"`
+	UserID             uint      `json:"userId"`
+	User               User      `json:"user" gorm:"foreignKey:UserID"`
+	Quantity           int       `json:"quantity"`
+	RentalDuration     int       `json:"rentalDuration"` // in days
+	TotalAmount        float64   `json:"totalAmount"`
+	StateBefore        string    `json:"stateBefore"`
+	StateAfter         string    `json:"stateAfter"`
+	UsageDate          time.Time `json:"usageDate"`
+	RetrievalDate      time.Time `json:"retrievalDate"`
+	StartDate          time.Time `json:"startDate"`          // Usage start date
+	EndDate            time.Time `json:"endDate"`            // Usage end date
+	RetrievalStartDate time.Time `json:"retrievalStartDate"` // Start date for retrieving the item
+	RetrievalEndDate   time.Time `json:"retrievalEndDate"`   // End date for retrieving the item
 }
 
 // SaveContract persists a new contract to the database

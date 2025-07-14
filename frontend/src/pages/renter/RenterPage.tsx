@@ -14,17 +14,18 @@ import {
   Separator,
   ScrollArea
 } from '@radix-ui/themes';
-import { getProducts, getContracts } from '../../services/api';
+import { getProducts, getContracts, getUsers } from '../../services/api';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-import { Product, Contract } from '../../types';
+import { Product, Contract, User } from '../../types';
 
 const RenterPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [myRentals, setMyRentals] = useState<Contract[]>([]);
+  const [renters, setRenters] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productDetailsOpen, setProductDetailsOpen] = useState<boolean>(false);
-  const [currentView, setCurrentView] = useState<'available' | 'my-rentals'>('available');
+  const [currentView, setCurrentView] = useState<'available' | 'my-rentals' | 'renters'>('available');
 
   // Mock user ID - in a real app, this would come from authentication
   const currentUserId = "user123";
@@ -36,9 +37,10 @@ const RenterPage: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [productsData, contractsData] = await Promise.all([
+      const [productsData, contractsData, rentersData] = await Promise.all([
         getProducts(),
-        getContracts()
+        getContracts(),
+        getUsers('renter')  // Only get users with kind='renter'
       ]);
       
       // Mark products as available if not rented
@@ -50,6 +52,9 @@ const RenterPage: React.FC = () => {
         ...product,
         status: rentedProductIds.includes(product.id) ? 'Rented' : 'Available'
       }));
+      
+      // Set renters
+      setRenters(rentersData);
       
       // Get user's rentals
       const userRentals = contractsData
@@ -106,13 +111,68 @@ const RenterPage: React.FC = () => {
         </Button>
         <Button 
           variant={currentView === 'my-rentals' ? 'solid' : 'soft'} 
+          mr="2"
           onClick={() => setCurrentView('my-rentals')}
         >
           My Rentals
         </Button>
+        <Button 
+          variant={currentView === 'renters' ? 'solid' : 'soft'} 
+          onClick={() => setCurrentView('renters')}
+        >
+          Renters
+        </Button>
       </Flex>
       
-      {currentView === 'available' ? (
+      {currentView === 'renters' ? (
+        <>
+          <Text mb="2">All registered renters:</Text>
+          
+          {loading ? (
+            <Text>Loading renters...</Text>
+          ) : (
+            <Card>
+              <Table.Root>
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
+                    <Table.ColumnHeaderCell>Email</Table.ColumnHeaderCell>
+                    <Table.ColumnHeaderCell>Phone</Table.ColumnHeaderCell>
+                    <Table.ColumnHeaderCell>Address</Table.ColumnHeaderCell>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {renters.length > 0 ? (
+                    renters.map((renter) => (
+                      <Table.Row key={renter.id}>
+                        <Table.Cell>
+                          <Flex align="center" gap="2">
+                            <Avatar
+                              fallback={`${renter.firstName.charAt(0)}${renter.lastName.charAt(0)}`}
+                              color="indigo"
+                              size="1"
+                            />
+                            {renter.firstName} {renter.lastName}
+                          </Flex>
+                        </Table.Cell>
+                        <Table.Cell>{renter.email}</Table.Cell>
+                        <Table.Cell>{renter.phoneNumber}</Table.Cell>
+                        <Table.Cell>{renter.postalAddress}, {renter.city}</Table.Cell>
+                      </Table.Row>
+                    ))
+                  ) : (
+                    <Table.Row>
+                      <Table.Cell colSpan={4}>
+                        <Text align="center">No renters available</Text>
+                      </Table.Cell>
+                    </Table.Row>
+                  )}
+                </Table.Body>
+              </Table.Root>
+            </Card>
+          )}
+        </>
+      ) : currentView === 'available' ? (
         <>
           <Text mb="2">Browse available items for rent:</Text>
           

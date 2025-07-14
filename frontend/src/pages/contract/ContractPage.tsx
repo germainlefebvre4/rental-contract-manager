@@ -14,27 +14,49 @@ import {
   Separator,
   DropdownMenu
 } from '@radix-ui/themes';
-import { getContracts, createContract, getProducts, getUsers } from '../../services/api';
+import { getContracts, createContract, getProducts, getUsers, createUser } from '../../services/api';
 import { generatePDF } from '../../services/pdf';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Contract, Product, User, ContractPDFData } from '../../types';
 
 const ContractPage: React.FC = () => {
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [filteredContracts, setFilteredContracts] = useState<Contract[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
   const [viewDialogOpen, setViewDialogOpen] = useState<boolean>(false);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
-  const [newContract, setNewContract] = useState<Partial<Contract>>({
-    productId: '',
-    userId: '',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'Pending'
+  const [productSearchQuery, setProductSearchQuery] = useState<string>('');
+  const [userSearchQuery, setUserSearchQuery] = useState<string>('');
+  const [newContract, setNewContract] = useState<Partial<Contract>>(() => {
+    // Initialize dates
+    const usageStartDate = new Date().toISOString().split('T')[0];
+    const usageEndDate = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const retrievalEndDate = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    return {
+      productId: '',
+      startDate: usageStartDate,
+      endDate: usageEndDate,
+      retrievalStartDate: usageStartDate,  // Same as usage start date
+      retrievalEndDate: retrievalEndDate,  // One day after usage end date
+      status: 'Pending'
+    };
+  });
+  const [newRenter, setNewRenter] = useState<Partial<User>>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    postalAddress: '',
+    city: '',
+    birthDate: '',
+    phoneNumber: '',
+    kind: 'renter'
   });
   const [errors, setErrors] = useState<any>({});
+  const [renterErrors, setRenterErrors] = useState<any>({});
 
   useEffect(() => {
     fetchData();
@@ -56,6 +78,7 @@ const ContractPage: React.FC = () => {
       });
       
       setContracts(enhancedContracts);
+      setFilteredContracts(enhancedContracts);
       setProducts(productsData);
       setUsers(usersData);
     } catch (error) {
@@ -65,9 +88,53 @@ const ContractPage: React.FC = () => {
     }
   };
 
+  // Filter contracts based on search queries
+  const filterContracts = () => {
+    let result = [...contracts];
+    
+    // Filter by product name
+    if (productSearchQuery) {
+      const lowerProductQuery = productSearchQuery.toLowerCase();
+      result = result.filter(contract => 
+        contract.product && (
+          contract.product.object.toLowerCase().includes(lowerProductQuery) ||
+          contract.product.brand.toLowerCase().includes(lowerProductQuery) ||
+          contract.product.model.toLowerCase().includes(lowerProductQuery)
+        )
+      );
+    }
+    
+    // Filter by user details
+    if (userSearchQuery) {
+      const lowerUserQuery = userSearchQuery.toLowerCase();
+      result = result.filter(contract => 
+        contract.user && (
+          contract.user.firstName.toLowerCase().includes(lowerUserQuery) ||
+          contract.user.lastName.toLowerCase().includes(lowerUserQuery) ||
+          contract.user.email.toLowerCase().includes(lowerUserQuery)
+        )
+      );
+    }
+    
+    setFilteredContracts(result);
+  };
+  
+  // Update filters when search queries change
+  useEffect(() => {
+    filterContracts();
+  }, [productSearchQuery, userSearchQuery, contracts]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setNewContract(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleRenterInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewRenter(prev => ({
       ...prev,
       [name]: value
     }));
@@ -81,14 +148,6 @@ const ContractPage: React.FC = () => {
     }));
   };
 
-  const handleUserChange = (value: string) => {
-    console.log('User selected:', value);
-    setNewContract(prev => ({
-      ...prev,
-      userId: value || ''
-    }));
-  };
-
   const handleStatusChange = (value: string) => {
     setNewContract(prev => ({
       ...prev,
@@ -96,20 +155,37 @@ const ContractPage: React.FC = () => {
     }));
   };
 
-  const handleDateChange = (type: 'startDate' | 'endDate', date: string) => {
-    setNewContract(prev => ({
-      ...prev,
-      [type]: date
-    }));
+  const handleDateChange = (type: 'startDate' | 'endDate' | 'retrievalStartDate' | 'retrievalEndDate', date: string) => {
+    setNewContract(prev => {
+      // Create updated contract state
+      const updatedContract = {
+        ...prev,
+        [type]: date
+      };
+      
+      // If usage start date changes, update retrieval start date to match
+      if (type === 'startDate') {
+        updatedContract.retrievalStartDate = date;
+      }
+      
+      // If usage end date changes, update retrieval end date to match
+      if (type === 'endDate') {
+        // Set retrieval end date to be the day after usage end date
+        const endDate = new Date(date);
+        endDate.setDate(endDate.getDate());
+        updatedContract.retrievalEndDate = endDate.toISOString().split('T')[0];
+      }
+      
+      return updatedContract;
+    });
   };
 
   const calculateTotalPrice = (productId: string, startDate: string, endDate: string): number => {
     const product = products.find(p => p.id === productId);
     if (!product) return 0;
     
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    // Use the helper function for consistency
+    const days = calculateRentalDuration(startDate, endDate);
     
     if (days <= 0) return 0;
     
@@ -119,16 +195,38 @@ const ContractPage: React.FC = () => {
     return (weeks * product.pricePerWeek) + (remainingDays * product.pricePerDay);
   };
 
+  const validateRenterInput = (): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    if (!newRenter.firstName) errors.firstName = 'First name is required';
+    if (!newRenter.lastName) errors.lastName = 'Last name is required';
+    // if (!newRenter.email) errors.email = 'Email is required';
+    // if (!newRenter.postalAddress) errors.postalAddress = 'Postal address is required';
+    // if (!newRenter.city) errors.city = 'City is required';
+    // if (!newRenter.phoneNumber) errors.phoneNumber = 'Phone number is required';
+    return errors;
+  };
+
   const handleSubmit = async () => {
     try {
-      const errors: Record<string, string> = {};
-      if (!newContract.productId) errors.productId = 'Product is required';
-      if (!newContract.userId) errors.userId = 'User is required';
-      if (!newContract.startDate) errors.startDate = 'Start date is required';
-      if (!newContract.endDate) errors.endDate = 'End date is required';
+      // Validate contract fields
+      const contractErrors: Record<string, string> = {};
+      if (!newContract.productId) contractErrors.productId = 'Product is required';
+      if (!newContract.startDate) contractErrors.startDate = 'Usage start date is required';
+      if (!newContract.endDate) contractErrors.endDate = 'Usage end date is required';
+      if (!newContract.retrievalStartDate) contractErrors.retrievalStartDate = 'Retrieval start date is required';
+      if (!newContract.retrievalEndDate) contractErrors.retrievalEndDate = 'Retrieval end date is required';
       
-      if (Object.keys(errors).length > 0) {
-        setErrors(errors);
+      // Validate renter fields
+      const renterFormErrors = validateRenterInput();
+      
+      // Check for validation errors
+      if (Object.keys(contractErrors).length > 0) {
+        setErrors(contractErrors);
+        return;
+      }
+      
+      if (Object.keys(renterFormErrors).length > 0) {
+        setRenterErrors(renterFormErrors);
         return;
       }
       
@@ -138,40 +236,103 @@ const ContractPage: React.FC = () => {
         newContract.endDate as string
       );
 
-      // Set startDate as datetime
-      const startDate = new Date(newContract.startDate as string);
-      const endDate = new Date(newContract.endDate as string);
-      newContract.startDate = startDate.toISOString();
-      newContract.endDate = endDate.toISOString();
+      // Calculate rental duration in days using the helper function
+      const durationInDays = calculateRentalDuration(
+        newContract.startDate as string,
+        newContract.endDate as string
+      );
+
+      // Set all dates as datetime
+      const start = new Date(newContract.startDate as string);
+      const end = new Date(newContract.endDate as string);
+      const retrievalStartDate = new Date(newContract.retrievalStartDate as string);
+      const retrievalEndDate = new Date(newContract.retrievalEndDate as string);
       
+      newContract.startDate = start.toISOString();
+      newContract.endDate = end.toISOString();
+      newContract.retrievalStartDate = retrievalStartDate.toISOString();
+      newContract.retrievalEndDate = retrievalEndDate.toISOString();
+      
+      // Create contract data
       const contractData = {
         ...newContract,
-        totalPrice
+        totalPrice,
+        totalAmount: totalPrice, // For backend database mapping
+        durationDays: durationInDays, // Frontend property
+        rentalDuration: durationInDays // Backend property
       };
       
       setErrors({});
-      const response = await createContract(contractData);
+      setRenterErrors({});
       
-      const product = products.find(p => p.id === response.productId);
-      const user = users.find(u => u.id === response.userId);
+      // Create both user and contract in a single API call
+      const contractResponse = await createContract(contractData, newRenter);
       
-      setContracts(prev => [...prev, { ...response, product, user }]);
+      // Find the product for the contract
+      const product = products.find(p => p.id === contractResponse.productId);
+      
+      // Get the user from the response or create a representation
+      // The backend should have created the user and returned it with the contract
+      let user: User;
+      if (contractResponse.user) {
+        user = contractResponse.user;
+      } else {
+        // Ensure all required fields are present and not undefined
+        user = {
+          id: contractResponse.userId,
+          firstName: newRenter.firstName || '',
+          lastName: newRenter.lastName || '',
+          email: newRenter.email || '',
+          postalAddress: newRenter.postalAddress || '',
+          city: newRenter.city || '',
+          phoneNumber: newRenter.phoneNumber || '',
+          kind: newRenter.kind as 'admin' | 'renter' || 'renter'
+        };
+        if (newRenter.birthDate) {
+          user.birthDate = newRenter.birthDate;
+        }
+      }
+      
+      // Add the new contract to the list with product and user info
+      setContracts(prev => [...prev, { 
+        ...contractResponse, 
+        product, 
+        user 
+      }]);
+      
       setDialogOpen(false);
       resetForm();
     } catch (error) {
-      console.error('Error creating contract:', error);
+      console.error('Error creating contract and renter:', error);
     }
   };
 
   const resetForm = () => {
+    // Initialize dates
+    const usageStartDate = new Date().toISOString().split('T')[0];
+    const usageEndDate = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const retrievalEndDate = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
     setNewContract({
       productId: '',
-      userId: '',
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      startDate: usageStartDate,
+      endDate: usageEndDate,
+      retrievalStartDate: usageStartDate,  // Same as usage start date
+      retrievalEndDate: retrievalEndDate,  // One day after usage end date
       status: 'Pending'
     });
+    setNewRenter({
+      firstName: '',
+      lastName: '',
+      email: '',
+      postalAddress: '',
+      city: '',
+      birthDate: '',
+      phoneNumber: '',
+      kind: 'renter'
+    });
     setErrors({});
+    setRenterErrors({});
   };
 
   const handleViewContract = (contract: Contract) => {
@@ -209,11 +370,14 @@ const ContractPage: React.FC = () => {
       renterAddress: selectedContract.user.postalAddress,
       renterCity: selectedContract.user.city,
       // Contract details
-      totalAmount: selectedContract.totalPrice,
+      totalAmount: selectedContract.totalPrice || selectedContract.totalAmount || 0,
+      durationDays: selectedContract.durationDays || calculateRentalDuration(selectedContract.startDate, selectedContract.endDate),
       stateBefore: "Good condition",
       stateAfter: "",
       usageDate: `${formatDate(selectedContract.startDate)} to ${formatDate(selectedContract.endDate)}`,
-      retrievalDates: formatDate(selectedContract.endDate),
+      retrievalDates: selectedContract.retrievalStartDate && selectedContract.retrievalEndDate ? 
+        `${formatDate(selectedContract.retrievalStartDate)} to ${formatDate(selectedContract.retrievalEndDate)}` :
+        formatDate(selectedContract.endDate),
       // Additional fields
       currentDate: currentDate,
       city: selectedContract.user.city || "Your City"
@@ -238,11 +402,41 @@ const ContractPage: React.FC = () => {
     return idString.length > 8 ? `${idString.substring(0, 8)}...` : idString;
   };
 
+  // Helper function to calculate rental duration
+  const calculateRentalDuration = (startDate: string, endDate: string): number => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
   return (
     <Box className="contract-page" p="4">
       <Flex justify="between" align="center" mb="4">
         <Heading size="6">Contract Management</Heading>
         <Button onClick={() => setDialogOpen(true)}>Create New Contract</Button>
+      </Flex>
+      
+      <Flex gap="4" mb="4">
+        <Box style={{ flex: 1 }}>
+          <TextField.Root>
+            <input
+              placeholder="Search by product name..." 
+              value={productSearchQuery}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProductSearchQuery(e.target.value)}
+              style={{ width: '100%', padding: '8px' }}
+            />
+          </TextField.Root>
+        </Box>
+        <Box style={{ flex: 1 }}>
+          <TextField.Root>
+            <input
+              placeholder="Search by renter name or email..." 
+              value={userSearchQuery}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUserSearchQuery(e.target.value)}
+              style={{ width: '100%', padding: '8px' }}
+            />
+          </TextField.Root>
+        </Box>
       </Flex>
       
       <Card>
@@ -255,15 +449,17 @@ const ContractPage: React.FC = () => {
                 <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
                 <Table.ColumnHeaderCell>Product</Table.ColumnHeaderCell>
                 <Table.ColumnHeaderCell>Renter</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Period</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Usage Period</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Duration</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Retrieval Period</Table.ColumnHeaderCell>
                 <Table.ColumnHeaderCell>Amount</Table.ColumnHeaderCell>
                 <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
                 <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {contracts.length > 0 ? (
-                contracts.map((contract) => (
+              {filteredContracts.length > 0 ? (
+                filteredContracts.map((contract) => (
                   <Table.Row key={contract.id}>
                     <Table.Cell>{formatId(contract.id)}</Table.Cell>
                     <Table.Cell>
@@ -279,7 +475,15 @@ const ContractPage: React.FC = () => {
                     <Table.Cell>
                       {formatDate(contract.startDate)} - {formatDate(contract.endDate)}
                     </Table.Cell>
-                    <Table.Cell>{formatCurrency(contract.totalPrice)}</Table.Cell>
+                    <Table.Cell>
+                      {contract.durationDays || calculateRentalDuration(contract.startDate, contract.endDate)} day(s)
+                    </Table.Cell>
+                    <Table.Cell>
+                      {contract.retrievalStartDate && contract.retrievalEndDate 
+                        ? `${formatDate(contract.retrievalStartDate)} - ${formatDate(contract.retrievalEndDate)}`
+                        : 'Not specified'}
+                    </Table.Cell>
+                    <Table.Cell>{formatCurrency(contract.totalPrice || contract.totalAmount || 0)}</Table.Cell>
                     <Table.Cell>
                       <Badge color={getStatusBadgeColor(contract.status)}>
                         {contract.status}
@@ -312,7 +516,7 @@ const ContractPage: React.FC = () => {
                 ))
               ) : (
                 <Table.Row>
-                  <Table.Cell colSpan={7}>
+                  <Table.Cell colSpan={8}>
                     <Text align="center">No contracts available</Text>
                   </Table.Cell>
                 </Table.Row>
@@ -323,7 +527,7 @@ const ContractPage: React.FC = () => {
       </Card>
 
       <Dialog.Root open={dialogOpen} onOpenChange={setDialogOpen}>
-        <Dialog.Content style={{ maxWidth: 500 }}>
+        <Dialog.Content style={{ maxWidth: 700 }}>
           <Dialog.Title>Create New Rental Contract</Dialog.Title>
           <Dialog.Description size="2" mb="4">
             Fill in the details to create a new rental contract.
@@ -354,33 +558,136 @@ const ContractPage: React.FC = () => {
             </Box>
             
             <Box>
-              <label htmlFor="userId">
-                <Text as="div" size="2" mb="1" weight="bold">
-                  Renter
-                </Text>
-              </label>
-              <Select.Root 
-                value={newContract.userId} 
-                onValueChange={handleUserChange}
-                defaultValue=""
-              >
-                <Select.Trigger placeholder="Select a renter" />
-                <Select.Content position="popper">
-                  {users.map(user => (
-                    <Select.Item key={user.id} value={user.id}>
-                      {user.firstName} {user.lastName}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-              {errors.userId && <Text color="red" size="1">{errors.userId}</Text>}
+              <Text as="div" size="2" mb="3" weight="bold">
+                Renter Information
+              </Text>
+              
+              <Flex direction="column" gap="3">
+                <Flex gap="3">
+                  <Box style={{ flex: 1 }}>
+                    <label htmlFor="firstName">
+                      <Text as="div" size="2" mb="1" weight="bold">
+                        First Name
+                      </Text>
+                    </label>
+                    <TextField.Root 
+                      id="firstName" 
+                      name="firstName"
+                      value={newRenter.firstName}
+                      onChange={handleRenterInputChange}
+                      placeholder="Enter first name"
+                    />
+                    {renterErrors.firstName && <Text color="red" size="1">{renterErrors.firstName}</Text>}
+                  </Box>
+                  
+                  <Box style={{ flex: 1 }}>
+                    <label htmlFor="lastName">
+                      <Text as="div" size="2" mb="1" weight="bold">
+                        Last Name
+                      </Text>
+                    </label>
+                    <TextField.Root 
+                      id="lastName" 
+                      name="lastName"
+                      value={newRenter.lastName}
+                      onChange={handleRenterInputChange}
+                      placeholder="Enter last name"
+                    />
+                    {renterErrors.lastName && <Text color="red" size="1">{renterErrors.lastName}</Text>}
+                  </Box>
+                </Flex>
+                
+                <Box>
+                  <label htmlFor="email">
+                    <Text as="div" size="2" mb="1" weight="bold">
+                      Email
+                    </Text>
+                  </label>
+                  <TextField.Root 
+                    id="email" 
+                    name="email"
+                    type="email"
+                    value={newRenter.email}
+                    onChange={handleRenterInputChange}
+                    placeholder="Enter email address"
+                  />
+                  {renterErrors.email && <Text color="red" size="1">{renterErrors.email}</Text>}
+                </Box>
+                
+                <Box>
+                  <label htmlFor="phoneNumber">
+                    <Text as="div" size="2" mb="1" weight="bold">
+                      Phone Number
+                    </Text>
+                  </label>
+                  <TextField.Root 
+                    id="phoneNumber" 
+                    name="phoneNumber"
+                    value={newRenter.phoneNumber}
+                    onChange={handleRenterInputChange}
+                    placeholder="Enter phone number"
+                  />
+                  {renterErrors.phoneNumber && <Text color="red" size="1">{renterErrors.phoneNumber}</Text>}
+                </Box>
+
+                <Box>
+                  <label htmlFor="postalAddress">
+                    <Text as="div" size="2" mb="1" weight="bold">
+                      Postal Address
+                    </Text>
+                  </label>
+                  <TextField.Root 
+                    id="postalAddress" 
+                    name="postalAddress"
+                    value={newRenter.postalAddress}
+                    onChange={handleRenterInputChange}
+                    placeholder="Enter postal address"
+                  />
+                  {renterErrors.postalAddress && <Text color="red" size="1">{renterErrors.postalAddress}</Text>}
+                </Box>
+
+                <Box>
+                  <label htmlFor="city">
+                    <Text as="div" size="2" mb="1" weight="bold">
+                      City
+                    </Text>
+                  </label>
+                  <TextField.Root 
+                    id="city" 
+                    name="city"
+                    value={newRenter.city}
+                    onChange={handleRenterInputChange}
+                    placeholder="Enter city"
+                  />
+                  {renterErrors.city && <Text color="red" size="1">{renterErrors.city}</Text>}
+                </Box>
+                
+                <Box>
+                  <label htmlFor="birthDate">
+                    <Text as="div" size="2" mb="1" weight="bold">
+                      Birth Date
+                    </Text>
+                  </label>
+                  <TextField.Root 
+                    id="birthDate" 
+                    name="birthDate"
+                    type="date"
+                    value={newRenter.birthDate}
+                    onChange={handleRenterInputChange}
+                  />
+                  {renterErrors.birthDate && <Text color="red" size="1">{renterErrors.birthDate}</Text>}
+                </Box>
+              </Flex>
+
+              <Separator size="4" my="3" />
             </Box>
             
+            <Text as="div" size="3" mb="2" weight="bold">Usage Period</Text>
             <Flex gap="3">
               <Box style={{ flex: 1 }}>
                 <label htmlFor="startDate">
                   <Text as="div" size="2" mb="1" weight="bold">
-                    Start Date
+                    Usage Start Date
                   </Text>
                 </label>
                 <TextField.Root 
@@ -396,7 +703,7 @@ const ContractPage: React.FC = () => {
               <Box style={{ flex: 1 }}>
                 <label htmlFor="endDate">
                   <Text as="div" size="2" mb="1" weight="bold">
-                    End Date
+                    Usage End Date
                   </Text>
                 </label>
                 <TextField.Root 
@@ -407,6 +714,44 @@ const ContractPage: React.FC = () => {
                   onChange={(e) => handleDateChange('endDate', e.target.value)}
                 />
                 {errors.endDate && <Text color="red" size="1">{errors.endDate}</Text>}
+              </Box>
+            </Flex>
+
+            <Text as="div" size="3" mt="4" mb="2" weight="bold">Retrieval Period</Text>
+            <Text as="div" size="1" mb="2" color="gray">
+              Retrieval dates are automatically updated when you change the usage dates, but you can adjust them if needed.
+            </Text>
+            <Flex gap="3">
+              <Box style={{ flex: 1 }}>
+                <label htmlFor="retrievalStartDate">
+                  <Text as="div" size="2" mb="1" weight="bold">
+                    Retrieval Start Date
+                  </Text>
+                </label>
+                <TextField.Root 
+                  id="retrievalStartDate"
+                  name="retrievalStartDate"
+                  type="date"
+                  value={newContract.retrievalStartDate || ''}
+                  onChange={(e) => handleDateChange('retrievalStartDate', e.target.value)}
+                />
+                {errors.retrievalStartDate && <Text color="red" size="1">{errors.retrievalStartDate}</Text>}
+              </Box>
+              
+              <Box style={{ flex: 1 }}>
+                <label htmlFor="retrievalEndDate">
+                  <Text as="div" size="2" mb="1" weight="bold">
+                    Retrieval End Date
+                  </Text>
+                </label>
+                <TextField.Root 
+                  id="retrievalEndDate"
+                  name="retrievalEndDate"
+                  type="date"
+                  value={newContract.retrievalEndDate || ''}
+                  onChange={(e) => handleDateChange('retrievalEndDate', e.target.value)}
+                />
+                {errors.retrievalEndDate && <Text color="red" size="1">{errors.retrievalEndDate}</Text>}
               </Box>
             </Flex>
             
@@ -433,17 +778,22 @@ const ContractPage: React.FC = () => {
             {newContract.productId && newContract.startDate && newContract.endDate && (
               <Box>
                 <Text as="div" size="2" mb="1" weight="bold">
-                  Estimated Total Price
+                  Rental Summary
                 </Text>
-                <Text weight="bold">
-                  {formatCurrency(
-                    calculateTotalPrice(
-                      newContract.productId,
-                      newContract.startDate,
-                      newContract.endDate
-                    )
-                  )}
-                </Text>
+                <Flex direction="column" gap="1">
+                  <Text weight="bold">
+                    {formatCurrency(
+                      calculateTotalPrice(
+                        newContract.productId,
+                        newContract.startDate,
+                        newContract.endDate
+                      )
+                    )}
+                  </Text>
+                  <Text size="1" color="gray">
+                    Duration: {calculateRentalDuration(newContract.startDate, newContract.endDate)} day(s)
+                  </Text>
+                </Flex>
               </Box>
             )}
           </Flex>
@@ -531,20 +881,55 @@ const ContractPage: React.FC = () => {
               </Box>
               
               <Box>
-                <Text size="2" weight="bold" mb="2">Rental Period & Payment</Text>
+                <Text size="2" weight="bold" mb="2">Usage Period</Text>
                 <Card variant="surface">
                   <Flex gap="3" direction="column">
                     <Flex justify="between">
-                      <Text size="2" color="gray">Start Date</Text>
+                      <Text size="2" color="gray">Usage Start Date</Text>
                       <Text size="2">{formatDate(selectedContract.startDate)}</Text>
                     </Flex>
                     <Flex justify="between">
-                      <Text size="2" color="gray">End Date</Text>
+                      <Text size="2" color="gray">Usage End Date</Text>
                       <Text size="2">{formatDate(selectedContract.endDate)}</Text>
                     </Flex>
+                  </Flex>
+                </Card>
+              </Box>
+              
+              <Box>
+                <Text size="2" weight="bold" mb="2">Retrieval Period</Text>
+                <Card variant="surface">
+                  <Flex gap="3" direction="column">
+                    <Flex justify="between">
+                      <Text size="2" color="gray">Retrieval Start Date</Text>
+                      <Text size="2">
+                        {selectedContract.retrievalStartDate ? formatDate(selectedContract.retrievalStartDate) : 'Not specified'}
+                      </Text>
+                    </Flex>
+                    <Flex justify="between">
+                      <Text size="2" color="gray">Retrieval End Date</Text>
+                      <Text size="2">
+                        {selectedContract.retrievalEndDate ? formatDate(selectedContract.retrievalEndDate) : 'Not specified'}
+                      </Text>
+                    </Flex>
+                  </Flex>
+                </Card>
+              </Box>
+              
+              <Box>
+                <Text size="2" weight="bold" mb="2">Payment</Text>
+                <Card variant="surface">
+                  <Flex gap="3" direction="column">
                     <Flex justify="between">
                       <Text size="2" color="gray">Total Amount</Text>
-                      <Text size="2" weight="bold">{formatCurrency(selectedContract.totalPrice)}</Text>
+                      <Text size="2" weight="bold">{formatCurrency(selectedContract.totalPrice || selectedContract.totalAmount || 0)}</Text>
+                    </Flex>
+                    <Flex justify="between">
+                      <Text size="2" color="gray">Rental Duration</Text>
+                      <Text size="2">
+                        {selectedContract.durationDays || calculateRentalDuration(selectedContract.startDate, selectedContract.endDate)} 
+                        day{(selectedContract.durationDays || calculateRentalDuration(selectedContract.startDate, selectedContract.endDate)) !== 1 ? 's' : ''}
+                      </Text>
                     </Flex>
                   </Flex>
                 </Card>

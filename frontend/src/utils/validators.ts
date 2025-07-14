@@ -8,6 +8,7 @@ interface UserErrors {
     birthDate?: string;
     phoneNumber?: string;
     email?: string;
+    kind?: string;
 }
 
 interface UserData {
@@ -18,6 +19,7 @@ interface UserData {
     birthDate: string;
     phoneNumber: string;
     email: string;
+    kind: string;
 }
 
 interface ProductErrors {
@@ -71,6 +73,10 @@ export const validateUserInput = (data: UserData): { errors: UserErrors; isValid
 
     if (!validateEmail(data.email)) {
         errors.email = 'Email is invalid';
+    }
+    
+    if (validateEmpty(data.kind) || (data.kind !== 'admin' && data.kind !== 'renter')) {
+        errors.kind = 'User type must be either admin or renter';
     }
 
     return {

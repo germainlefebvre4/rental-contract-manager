@@ -9,11 +9,12 @@ type User struct {
 	ID            uint   `gorm:"primaryKey" json:"id"`
 	FirstName     string `json:"firstName" gorm:"not null"`
 	LastName      string `json:"lastName" gorm:"not null"`
-	PostalAddress string `json:"postal_address" gorm:"not null"`
-	City          string `json:"city" gorm:"not null"`
-	BirthDate     string `json:"birth_date" gorm:"not null"`
-	PhoneNumber   string `json:"phoneNumber" gorm:"not null"`
-	Email         string `json:"email" gorm:"not null;unique"`
+	PostalAddress string `json:"postalAddress" gorm:"column:postal_address;"`
+	City          string `json:"city" gorm:""`
+	BirthDate     string `json:"birthDate" gorm:"column:birth_date;"`
+	PhoneNumber   string `json:"phoneNumber" gorm:""`
+	Email         string `json:"email" gorm:""`
+	Kind          string `json:"kind" gorm:"default:'renter'"` // 'admin' or 'renter'
 }
 
 // Error definitions

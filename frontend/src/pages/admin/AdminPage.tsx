@@ -13,17 +13,21 @@ import {
   Dialog,
   Flex,
   Switch,
-  Avatar
+  Avatar,
+  Select
 } from '@radix-ui/themes';
-import { getProducts, createProduct } from '../../services/api';
-import { validateProductInput } from '../../utils/validators';
+import { getProducts, createProduct, getUsers, createUser } from '../../services/api';
+import { validateProductInput, validateUserInput } from '../../utils/validators';
 import { formatCurrency } from '../../utils/formatters';
-import { Product } from '../../types';
+import { Product, User } from '../../types';
 
 const AdminPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [usersLoading, setUsersLoading] = useState<boolean>(true);
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
+  const [userDialogOpen, setUserDialogOpen] = useState<boolean>(false);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     object: '',
     brand: '',
@@ -34,10 +38,22 @@ const AdminPage: React.FC = () => {
     pricePerWeek: 0,
     cautionDeposit: 0
   });
+  const [newUser, setNewUser] = useState<Partial<User>>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    postalAddress: '',
+    city: '',
+    birthDate: '',
+    phoneNumber: '',
+    kind: 'renter'
+  });
   const [errors, setErrors] = useState<any>({});
+  const [userErrors, setUserErrors] = useState<any>({});
 
   useEffect(() => {
     fetchProducts();
+    fetchUsers();
   }, []);
 
   const fetchProducts = async () => {
@@ -49,6 +65,18 @@ const AdminPage: React.FC = () => {
       console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      setUsersLoading(true);
+      const usersData = await getUsers();
+      setUsers(usersData);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    } finally {
+      setUsersLoading(false);
     }
   };
 
@@ -67,6 +95,21 @@ const AdminPage: React.FC = () => {
         [name]: value
       }));
     }
+  };
+
+  const handleUserInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setNewUser(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleUserKindChange = (value: string) => {
+    setNewUser(prev => ({
+      ...prev,
+      kind: value as 'admin' | 'renter'
+    }));
   };
 
   const handleSubmit = async () => {
@@ -88,6 +131,25 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const handleUserSubmit = async () => {
+    try {
+      const validation = validateUserInput ? validateUserInput(newUser as any) : { isValid: true, errors: {} };
+      
+      if (!validation.isValid) {
+        setUserErrors(validation.errors);
+        return;
+      }
+      
+      setUserErrors({});
+      const response = await createUser(newUser);
+      setUsers(prev => [...prev, response]);
+      setUserDialogOpen(false);
+      resetUserForm();
+    } catch (error) {
+      console.error('Error creating user:', error);
+    }
+  };
+
   const resetForm = () => {
     setNewProduct({
       object: '',
@@ -100,6 +162,20 @@ const AdminPage: React.FC = () => {
       cautionDeposit: 0
     });
     setErrors({});
+  };
+
+  const resetUserForm = () => {
+    setNewUser({
+      firstName: '',
+      lastName: '',
+      email: '',
+      postalAddress: '',
+      city: '',
+      birthDate: '',
+      phoneNumber: '',
+      kind: 'renter'
+    });
+    setUserErrors({});
   };
 
   return (
@@ -167,7 +243,45 @@ const AdminPage: React.FC = () => {
           
           <Tabs.Content value="users">
             <Card>
-              <Text>User management will be implemented here.</Text>
+              {usersLoading ? (
+                <Text>Loading users...</Text>
+              ) : (
+                <Table.Root>
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>First Name</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Last Name</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Email</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Phone Number</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Kind</Table.ColumnHeaderCell>
+                    </Table.Row>
+                  </Table.Header>
+                  
+                  <Table.Body>
+                    {users.length > 0 ? (
+                      users.map((user) => (
+                        <Table.Row key={user.id}>
+                          <Table.Cell>{user.firstName}</Table.Cell>
+                          <Table.Cell>{user.lastName}</Table.Cell>
+                          <Table.Cell>{user.email}</Table.Cell>
+                          <Table.Cell>{user.phoneNumber}</Table.Cell>
+                          <Table.Cell>
+                            <Badge color={user.kind === 'admin' ? 'blue' : 'green'}>
+                              {user.kind}
+                            </Badge>
+                          </Table.Cell>
+                        </Table.Row>
+                      ))
+                    ) : (
+                      <Table.Row>
+                        <Table.Cell colSpan={5}>
+                          <Text align="center">No users available</Text>
+                        </Table.Cell>
+                      </Table.Row>
+                    )}
+                  </Table.Body>
+                </Table.Root>
+              )}
             </Card>
           </Tabs.Content>
           
@@ -330,6 +444,165 @@ const AdminPage: React.FC = () => {
             </Dialog.Close>
             <Button onClick={handleSubmit}>
               Add Product
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      <Dialog.Root open={userDialogOpen} onOpenChange={setUserDialogOpen}>
+        <Dialog.Content style={{ maxWidth: 500 }}>
+          <Dialog.Title>Add New User</Dialog.Title>
+          <Dialog.Description size="2" mb="4">
+            Fill in the details to add a new user.
+          </Dialog.Description>
+          
+          <Flex direction="column" gap="3">
+            <Flex gap="3">
+              <Box style={{ flex: 1 }}>
+                <label htmlFor="firstName">
+                  <Text as="div" size="2" mb="1" weight="bold">
+                    First Name
+                  </Text>
+                </label>
+                <TextField.Root 
+                  id="firstName" 
+                  name="firstName"
+                  value={newUser.firstName}
+                  onChange={handleUserInputChange}
+                  placeholder="Enter first name"
+                />
+                {userErrors.firstName && <Text color="red" size="1">{userErrors.firstName}</Text>}
+              </Box>
+              
+              <Box style={{ flex: 1 }}>
+                <label htmlFor="lastName">
+                  <Text as="div" size="2" mb="1" weight="bold">
+                    Last Name
+                  </Text>
+                </label>
+                <TextField.Root 
+                  id="lastName" 
+                  name="lastName"
+                  value={newUser.lastName}
+                  onChange={handleUserInputChange}
+                  placeholder="Enter last name"
+                />
+                {userErrors.lastName && <Text color="red" size="1">{userErrors.lastName}</Text>}
+              </Box>
+            </Flex>
+            
+            <Box>
+              <label htmlFor="email">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  Email
+                </Text>
+              </label>
+              <TextField.Root 
+                id="email" 
+                name="email"
+                type="email"
+                value={newUser.email}
+                onChange={handleUserInputChange}
+                placeholder="Enter email address"
+              />
+              {userErrors.email && <Text color="red" size="1">{userErrors.email}</Text>}
+            </Box>
+            
+            <Box>
+              <label htmlFor="phoneNumber">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  Phone Number
+                </Text>
+              </label>
+              <TextField.Root 
+                id="phoneNumber" 
+                name="phoneNumber"
+                value={newUser.phoneNumber}
+                onChange={handleUserInputChange}
+                placeholder="Enter phone number"
+              />
+              {userErrors.phoneNumber && <Text color="red" size="1">{userErrors.phoneNumber}</Text>}
+            </Box>
+
+            <Box>
+              <label htmlFor="postalAddress">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  Postal Address
+                </Text>
+              </label>
+              <TextField.Root 
+                id="postalAddress" 
+                name="postalAddress"
+                value={newUser.postalAddress}
+                onChange={handleUserInputChange}
+                placeholder="Enter postal address"
+              />
+              {userErrors.postalAddress && <Text color="red" size="1">{userErrors.postalAddress}</Text>}
+            </Box>
+
+            <Box>
+              <label htmlFor="city">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  City
+                </Text>
+              </label>
+              <TextField.Root 
+                id="city" 
+                name="city"
+                value={newUser.city}
+                onChange={handleUserInputChange}
+                placeholder="Enter city"
+              />
+              {userErrors.city && <Text color="red" size="1">{userErrors.city}</Text>}
+            </Box>
+            
+            <Box>
+              <label htmlFor="birthDate">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  Birth Date
+                </Text>
+              </label>
+              <TextField.Root 
+                id="birthDate" 
+                name="birthDate"
+                type="date"
+                value={newUser.birthDate}
+                onChange={handleUserInputChange}
+              />
+              {userErrors.birthDate && <Text color="red" size="1">{userErrors.birthDate}</Text>}
+            </Box>
+
+            <Box>
+              <label htmlFor="kind">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  User Type
+                </Text>
+              </label>
+              <Select.Root 
+                defaultValue="renter"
+                value={newUser.kind}
+                onValueChange={handleUserKindChange}
+              >
+                <Select.Trigger />
+                <Select.Content>
+                  <Select.Group>
+                    <Select.Item value="admin">Admin</Select.Item>
+                    <Select.Item value="renter">Renter</Select.Item>
+                  </Select.Group>
+                </Select.Content>
+              </Select.Root>
+              {userErrors.kind && <Text color="red" size="1">{userErrors.kind}</Text>}
+            </Box>
+          </Flex>
+
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray" onClick={resetUserForm}>
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button onClick={handleUserSubmit}>
+              Add User
             </Button>
           </Flex>
         </Dialog.Content>

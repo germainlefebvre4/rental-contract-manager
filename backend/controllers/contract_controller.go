@@ -2,27 +2,64 @@ package controllers
 
 import (
 	"net/http"
+	"rental-contract-manager/database"
 	"rental-contract-manager/models"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
+// ContractRequest represents the data structure for contract creation
+type ContractRequest struct {
+	Contract models.Contract `json:"contract"`
+	User     *models.User    `json:"user,omitempty"` // Optional user data
+}
+
 // CreateContract handles the creation of a new rental contract
 func CreateContract(c *gin.Context) {
-	var contract models.Contract
-	if err := c.ShouldBindJSON(&contract); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	var request ContractRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		// Try binding to just the contract for backward compatibility
+		var contract models.Contract
+		if err := c.ShouldBindJSON(&contract); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		request.Contract = contract
 	}
 
-	// Save the contract to the database (implementation not shown)
-	if err := models.SaveContract(&contract); err != nil {
+	// If user data is provided, create the user first
+	if request.User != nil {
+		// Set default kind to "renter" if not specified
+		if request.User.Kind == "" {
+			request.User.Kind = "renter"
+		}
+
+		// Save the user to the database
+		if err := database.DB.Create(request.User).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+			return
+		}
+
+		// Associate the new user with the contract
+		request.Contract.UserID = request.User.ID
+	}
+
+	// Save the contract to the database
+	if err := models.SaveContract(&request.Contract); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not save contract"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, contract)
+	// Get the full contract with user data for the response
+	var fullContract models.Contract
+	if err := database.DB.Preload("User").Preload("Product").First(&fullContract, request.Contract.ID).Error; err != nil {
+		// If we can't get the full data, just return the contract we created
+		c.JSON(http.StatusCreated, request.Contract)
+		return
+	}
+
+	c.JSON(http.StatusCreated, fullContract)
 }
 
 // EditContract handles the editing of an existing rental contract

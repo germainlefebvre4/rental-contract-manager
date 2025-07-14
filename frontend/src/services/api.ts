@@ -26,9 +26,19 @@ export const getProducts = async (): Promise<Product[]> => {
   return response.data;
 };
 
-export const createContract = async (contract: Partial<Contract>): Promise<Contract> => {
-  const response = await api.post('/contracts', contract);
-  return response.data;
+export const createContract = async (contract: Partial<Contract>, user?: Partial<User>): Promise<Contract> => {
+  if (user) {
+    // Send both the contract and user data in the same request
+    const response = await api.post('/contracts', {
+      contract,
+      user
+    });
+    return response.data;
+  } else {
+    // Fallback to the old approach for backward compatibility
+    const response = await api.post('/contracts', contract);
+    return response.data;
+  }
 };
 
 export const getContracts = async (): Promise<Contract[]> => {
@@ -48,7 +58,7 @@ export const createUser = async (user: Partial<User>): Promise<User> => {
   return response.data;
 };
 
-export const getUsers = async (): Promise<User[]> => {
-  const response = await api.get('/users');
+export const getUsers = async (kind?: string): Promise<User[]> => {
+  const response = await api.get('/users', { params: { kind } });
   return response.data;
 };
