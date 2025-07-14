@@ -16,7 +16,7 @@ import {
   Avatar,
   Select
 } from '@radix-ui/themes';
-import { getProducts, createProduct, getUsers, createUser } from '../../services/api';
+import { getProducts, createProduct, updateProduct, deleteProduct, getUsers, createUser } from '../../services/api';
 import { validateProductInput, validateUserInput } from '../../utils/validators';
 import { formatCurrency } from '../../utils/formatters';
 import { Product, User } from '../../types';
@@ -28,7 +28,20 @@ const AdminPage: React.FC = () => {
   const [usersLoading, setUsersLoading] = useState<boolean>(true);
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
   const [userDialogOpen, setUserDialogOpen] = useState<boolean>(false);
+  const [editDialogOpen, setEditDialogOpen] = useState<boolean>(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
+    object: '',
+    brand: '',
+    model: '',
+    quantity: 1,
+    description: '',
+    pricePerDay: 0,
+    pricePerWeek: 0,
+    cautionDeposit: 0
+  });
+  const [editProduct, setEditProduct] = useState<Partial<Product>>({
     object: '',
     brand: '',
     model: '',
@@ -49,6 +62,7 @@ const AdminPage: React.FC = () => {
     kind: 'renter'
   });
   const [errors, setErrors] = useState<any>({});
+  const [editErrors, setEditErrors] = useState<any>({});
   const [userErrors, setUserErrors] = useState<any>({});
 
   useEffect(() => {
@@ -91,6 +105,23 @@ const AdminPage: React.FC = () => {
       }));
     } else {
       setNewProduct(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
+  };
+
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    // Handle numeric values
+    if (['quantity', 'pricePerDay', 'pricePerWeek', 'cautionDeposit'].includes(name)) {
+      setEditProduct(prev => ({
+        ...prev,
+        [name]: value === '' ? '' : Number(value)
+      }));
+    } else {
+      setEditProduct(prev => ({
         ...prev,
         [name]: value
       }));
@@ -150,6 +181,60 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  const handleEditProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setEditProduct({
+      object: product.object,
+      brand: product.brand,
+      model: product.model,
+      quantity: product.quantity,
+      description: product.description,
+      pricePerDay: product.pricePerDay,
+      pricePerWeek: product.pricePerWeek,
+      cautionDeposit: product.cautionDeposit
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateProduct = async () => {
+    if (!selectedProduct) return;
+    
+    try {
+      const validation = validateProductInput(editProduct as any);
+      
+      if (!validation.isValid) {
+        setEditErrors(validation.errors);
+        return;
+      }
+      
+      setEditErrors({});
+      const response = await updateProduct(selectedProduct.id, editProduct);
+      setProducts(prev => prev.map(p => p.id === selectedProduct.id ? response : p));
+      setEditDialogOpen(false);
+      resetEditForm();
+    } catch (error) {
+      console.error('Error updating product:', error);
+    }
+  };
+
+  const handleDeleteProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteProduct = async () => {
+    if (!selectedProduct) return;
+    
+    try {
+      await deleteProduct(selectedProduct.id);
+      setProducts(prev => prev.filter(p => p.id !== selectedProduct.id));
+      setDeleteDialogOpen(false);
+      setSelectedProduct(null);
+    } catch (error) {
+      console.error('Error deleting product:', error);
+    }
+  };
+
   const resetForm = () => {
     setNewProduct({
       object: '',
@@ -162,6 +247,21 @@ const AdminPage: React.FC = () => {
       cautionDeposit: 0
     });
     setErrors({});
+  };
+
+  const resetEditForm = () => {
+    setEditProduct({
+      object: '',
+      brand: '',
+      model: '',
+      quantity: 1,
+      description: '',
+      pricePerDay: 0,
+      pricePerWeek: 0,
+      cautionDeposit: 0
+    });
+    setEditErrors({});
+    setSelectedProduct(null);
   };
 
   const resetUserForm = () => {
@@ -207,6 +307,7 @@ const AdminPage: React.FC = () => {
                       <Table.ColumnHeaderCell>Daily Price</Table.ColumnHeaderCell>
                       <Table.ColumnHeaderCell>Weekly Price</Table.ColumnHeaderCell>
                       <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
                     </Table.Row>
                   </Table.Header>
                   
@@ -226,11 +327,31 @@ const AdminPage: React.FC = () => {
                               {product.status || 'Available'}
                             </Badge>
                           </Table.Cell>
+                          <Table.Cell>
+                            <Flex gap="2">
+                              <Button 
+                                size="1" 
+                                variant="soft" 
+                                color="blue"
+                                onClick={() => handleEditProduct(product)}
+                              >
+                                Edit
+                              </Button>
+                              <Button 
+                                size="1" 
+                                variant="soft" 
+                                color="red"
+                                onClick={() => handleDeleteProduct(product)}
+                              >
+                                Delete
+                              </Button>
+                            </Flex>
+                          </Table.Cell>
                         </Table.Row>
                       ))
                     ) : (
                       <Table.Row>
-                        <Table.Cell colSpan={6}>
+                        <Table.Cell colSpan={7}>
                           <Text align="center">No products available</Text>
                         </Table.Cell>
                       </Table.Row>
@@ -603,6 +724,193 @@ const AdminPage: React.FC = () => {
             </Dialog.Close>
             <Button onClick={handleUserSubmit}>
               Add User
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      {/* Edit Product Dialog */}
+      <Dialog.Root open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <Dialog.Content style={{ maxWidth: 500 }}>
+          <Dialog.Title>Edit Product</Dialog.Title>
+          <Dialog.Description size="2" mb="4">
+            Update the product details.
+          </Dialog.Description>
+          
+          <Flex direction="column" gap="3">
+            <Box>
+              <label htmlFor="edit-object">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  Object Name
+                </Text>
+              </label>
+              <TextField.Root 
+                id="edit-object" 
+                name="object"
+                value={editProduct.object}
+                onChange={handleEditInputChange}
+                placeholder="Enter the object name"
+              />
+              {editErrors.object && <Text color="red" size="1">{editErrors.object}</Text>}
+            </Box>
+            
+            <Flex gap="3">
+              <Box style={{ flex: 1 }}>
+                <label htmlFor="edit-brand">
+                  <Text as="div" size="2" mb="1" weight="bold">
+                    Brand
+                  </Text>
+                </label>
+                <TextField.Root 
+                  id="edit-brand" 
+                  name="brand"
+                  value={editProduct.brand}
+                  onChange={handleEditInputChange}
+                  placeholder="Enter brand"
+                />
+                {editErrors.brand && <Text color="red" size="1">{editErrors.brand}</Text>}
+              </Box>
+              
+              <Box style={{ flex: 1 }}>
+                <label htmlFor="edit-model">
+                  <Text as="div" size="2" mb="1" weight="bold">
+                    Model
+                  </Text>
+                </label>
+                <TextField.Root 
+                  id="edit-model" 
+                  name="model"
+                  value={editProduct.model}
+                  onChange={handleEditInputChange}
+                  placeholder="Enter model"
+                />
+                {editErrors.model && <Text color="red" size="1">{editErrors.model}</Text>}
+              </Box>
+            </Flex>
+            
+            <Box>
+              <label htmlFor="edit-quantity">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  Quantity
+                </Text>
+              </label>
+              <TextField.Root 
+                id="edit-quantity" 
+                name="quantity"
+                type="number"
+                value={editProduct.quantity}
+                onChange={handleEditInputChange}
+              />
+              {editErrors.quantity && <Text color="red" size="1">{editErrors.quantity}</Text>}
+            </Box>
+            
+            <Box>
+              <label htmlFor="edit-description">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  Description
+                </Text>
+              </label>
+              <TextField.Root 
+                id="edit-description" 
+                name="description"
+                value={editProduct.description}
+                onChange={handleEditInputChange}
+                placeholder="Enter product description"
+              />
+              {editErrors.description && <Text color="red" size="1">{editErrors.description}</Text>}
+            </Box>
+
+            <Separator size="4" />
+            
+            <Flex gap="3">
+              <Box style={{ flex: 1 }}>
+                <label htmlFor="edit-pricePerDay">
+                  <Text as="div" size="2" mb="1" weight="bold">
+                    Daily Price
+                  </Text>
+                </label>
+                <TextField.Root 
+                  id="edit-pricePerDay" 
+                  name="pricePerDay"
+                  type="number"
+                  value={editProduct.pricePerDay}
+                  onChange={handleEditInputChange}
+                />
+                {editErrors.pricePerDay && <Text color="red" size="1">{editErrors.pricePerDay}</Text>}
+              </Box>
+              
+              <Box style={{ flex: 1 }}>
+                <label htmlFor="edit-pricePerWeek">
+                  <Text as="div" size="2" mb="1" weight="bold">
+                    Weekly Price
+                  </Text>
+                </label>
+                <TextField.Root 
+                  id="edit-pricePerWeek" 
+                  name="pricePerWeek"
+                  type="number"
+                  value={editProduct.pricePerWeek}
+                  onChange={handleEditInputChange}
+                />
+                {editErrors.pricePerWeek && <Text color="red" size="1">{editErrors.pricePerWeek}</Text>}
+              </Box>
+            </Flex>
+            
+            <Box>
+              <label htmlFor="edit-cautionDeposit">
+                <Text as="div" size="2" mb="1" weight="bold">
+                  Security Deposit
+                </Text>
+              </label>
+              <TextField.Root 
+                id="edit-cautionDeposit" 
+                name="cautionDeposit"
+                type="number"
+                value={editProduct.cautionDeposit}
+                onChange={handleEditInputChange}
+              />
+              {editErrors.cautionDeposit && <Text color="red" size="1">{editErrors.cautionDeposit}</Text>}
+            </Box>
+          </Flex>
+
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray" onClick={resetEditForm}>
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button onClick={handleUpdateProduct}>
+              Update Product
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      {/* Delete Product Dialog */}
+      <Dialog.Root open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <Dialog.Content style={{ maxWidth: 450 }}>
+          <Dialog.Title>Delete Product</Dialog.Title>
+          <Dialog.Description size="2" mb="4">
+            Are you sure you want to delete this product? This action cannot be undone.
+          </Dialog.Description>
+          
+          {selectedProduct && (
+            <Box mb="4" p="3" style={{ backgroundColor: 'var(--gray-2)', borderRadius: '8px' }}>
+              <Text weight="bold">{selectedProduct.object}</Text>
+              <Text as="div" size="2" color="gray">
+                {selectedProduct.brand} {selectedProduct.model}
+              </Text>
+            </Box>
+          )}
+
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray">
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button color="red" onClick={confirmDeleteProduct}>
+              Delete Product
             </Button>
           </Flex>
         </Dialog.Content>

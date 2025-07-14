@@ -26,6 +26,15 @@ export const getProducts = async (): Promise<Product[]> => {
   return response.data;
 };
 
+export const updateProduct = async (id: string, product: Partial<Product>): Promise<Product> => {
+  const response = await api.put(`/products/${id}`, product);
+  return response.data;
+};
+
+export const deleteProduct = async (id: string): Promise<void> => {
+  await api.delete(`/products/${id}`);
+};
+
 export const createContract = async (contract: Partial<Contract>, user?: Partial<User>): Promise<Contract> => {
   if (user) {
     // Send both the contract and user data in the same request
