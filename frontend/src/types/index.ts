@@ -55,12 +55,18 @@ export interface ContractPDFData {
   pricePerDay: number;
   pricePerWeek: number;
   deposit: number;
-  // User information
+  // Renter information
   renterName: string;
   renterEmail: string;
   renterPhone: string;
   renterAddress: string;
   renterCity: string;
+  // Owner information
+  ownerName: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  ownerAddress: string;
+  ownerCity: string;
   // Contract details
   totalAmount: number;
   durationDays?: number;

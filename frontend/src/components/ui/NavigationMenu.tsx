@@ -44,7 +44,6 @@ const NavigationMenu: React.FC = () => {
             <Tabs.Trigger value="home">Home</Tabs.Trigger>
             <Tabs.Trigger value="admin">Admin</Tabs.Trigger>
             <Tabs.Trigger value="contract">Contracts</Tabs.Trigger>
-            <Tabs.Trigger value="renter">Renters</Tabs.Trigger>
             <Tabs.Trigger value="calendar">Calendar</Tabs.Trigger>
           </Tabs.List>
         </Tabs.Root>

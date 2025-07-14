@@ -4,7 +4,6 @@ import { Theme, Container, Flex, Box, Heading, Text } from '@radix-ui/themes';
 import '@radix-ui/themes/styles.css';
 import AdminPage from './pages/admin/AdminPage';
 import ContractPage from './pages/contract/ContractPage';
-import RenterPage from './pages/renter/RenterPage';
 import CalendarPage from './pages/calendar/CalendarPage';
 import NavigationMenu from './components/ui/NavigationMenu';
 
@@ -43,7 +42,6 @@ const App: React.FC = () => {
               <Routes>
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="/contract" element={<ContractPage />} />
-                <Route path="/renter" element={<RenterPage />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/" element={<HomePage />} />
               </Routes>

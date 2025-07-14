@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"rental-contract-manager/database"
 	"rental-contract-manager/models"
+	"rental-contract-manager/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -145,4 +146,97 @@ func GetContractsByDateRange(c *gin.Context) {
 	// Return the list of contracts
 
 	c.JSON(http.StatusOK, contracts)
+}
+
+// GenerateContractPDF handles the PDF generation for a contract
+func GenerateContractPDF(c *gin.Context) {
+	id := c.Param("id")
+
+	// Fetch the contract details
+	contract, err := models.GetContractByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Contract not found"})
+		return
+	}
+
+	// Generate the PDF file
+	pdfPath, err := utils.GeneratePDF(contract)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate PDF"})
+		return
+	}
+
+	// Return the PDF file as a response
+	c.File(pdfPath)
+}
+
+// GeneratePDF generates a PDF for a specific contract
+func GeneratePDF(c *gin.Context) {
+	id := c.Param("id")
+
+	// Get the contract with all related data
+	var contract models.Contract
+	if err := database.DB.Preload("User").Preload("Product").First(&contract, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Contract not found"})
+		return
+	}
+
+	// For now, we'll use placeholder owner data. In a real app, this would come from configuration or admin user
+	ownerData := struct {
+		FirstName string
+		LastName  string
+		Email     string
+		Phone     string
+		Address   string
+		City      string
+	}{
+		FirstName: "John",
+		LastName:  "Owner",
+		Email:     "owner@rent4goods.com",
+		Phone:     "+1-555-0123",
+		Address:   "123 Business St",
+		City:      "Business City",
+	}
+
+	// Convert to ContractData for PDF generation
+	contractData := utils.ContractData{
+		Object:          contract.Product.Object,
+		Brand:           contract.Product.Brand,
+		Model:           contract.Product.Model,
+		Quantity:        contract.Quantity,
+		Description:     contract.Product.Description,
+		Precautions:     contract.Product.Precautions,
+		PricePerDay:     contract.Product.PricePerDay,
+		PricePerWeek:    contract.Product.PricePerWeek,
+		CautionDeposit:  contract.Product.CautionDeposit,
+		RenterFirstName: contract.User.FirstName,
+		RenterLastName:  contract.User.LastName,
+		RenterAddress:   contract.User.PostalAddress,
+		RenterCity:      contract.User.City,
+		RenterBirthDate: contract.User.BirthDate,
+		RenterPhone:     contract.User.PhoneNumber,
+		RenterEmail:     contract.User.Email,
+		OwnerFirstName:  ownerData.FirstName,
+		OwnerLastName:   ownerData.LastName,
+		OwnerAddress:    ownerData.Address,
+		OwnerCity:       ownerData.City,
+		OwnerPhone:      ownerData.Phone,
+		OwnerEmail:      ownerData.Email,
+		RentalDays:      contract.RentalDuration,
+		TotalAmount:     contract.TotalAmount,
+		StateBefore:     contract.StateBefore,
+		StateAfter:      contract.StateAfter,
+		UsageDate:       contract.UsageDate.Format("2006-01-02"),
+		RetrievalDate:   contract.RetrievalDate.Format("2006-01-02"),
+	}
+
+	// Generate the PDF
+	pdfPath, err := utils.GeneratePDF(contractData)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate PDF"})
+		return
+	}
+
+	// Return the PDF file
+	c.File(pdfPath)
 }

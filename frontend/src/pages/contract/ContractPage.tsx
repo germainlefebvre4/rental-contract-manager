@@ -340,7 +340,7 @@ const ContractPage: React.FC = () => {
     setViewDialogOpen(true);
   };
 
-  const handleGeneratePDF = () => {
+  const handleGeneratePDF = async () => {
     if (!selectedContract || !selectedContract.product || !selectedContract.user) return;
     
     // Get current date in a readable format
@@ -349,6 +349,15 @@ const ContractPage: React.FC = () => {
       month: 'long', 
       day: 'numeric'
     });
+    
+    // Owner information - in a real application, this would come from user configuration or admin settings
+    const ownerInfo = {
+      name: "John Owner",
+      email: "owner@rent4goods.com",
+      phone: "+1-555-0123",
+      address: "123 Business Street",
+      city: "Business City"
+    };
     
     const contractData: ContractPDFData = {
       // Contract ID
@@ -363,12 +372,18 @@ const ContractPage: React.FC = () => {
       pricePerDay: selectedContract.product.pricePerDay,
       pricePerWeek: selectedContract.product.pricePerWeek,
       deposit: selectedContract.product.cautionDeposit,
-      // User information
+      // Renter information
       renterName: `${selectedContract.user.firstName} ${selectedContract.user.lastName}`,
       renterEmail: selectedContract.user.email,
       renterPhone: selectedContract.user.phoneNumber,
       renterAddress: selectedContract.user.postalAddress,
       renterCity: selectedContract.user.city,
+      // Owner information
+      ownerName: ownerInfo.name,
+      ownerEmail: ownerInfo.email,
+      ownerPhone: ownerInfo.phone,
+      ownerAddress: ownerInfo.address,
+      ownerCity: ownerInfo.city,
       // Contract details
       totalAmount: selectedContract.totalPrice || selectedContract.totalAmount || 0,
       durationDays: selectedContract.durationDays || calculateRentalDuration(selectedContract.startDate, selectedContract.endDate),
@@ -383,7 +398,12 @@ const ContractPage: React.FC = () => {
       city: selectedContract.user.city || "Your City"
     };
     
-    generatePDF(contractData);
+    try {
+      await generatePDF(contractData);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      // You could add a toast notification here
+    }
   };
 
   const getStatusBadgeColor = (status: string) => {
