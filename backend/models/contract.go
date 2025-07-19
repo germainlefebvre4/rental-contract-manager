@@ -83,3 +83,17 @@ func UpdateContract(contract *Contract) error {
 	result := database.DB.Save(contract)
 	return result.Error
 }
+
+// DeleteContract deletes a contract from the database
+func DeleteContract(id string) error {
+	result := database.DB.Delete(&Contract{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrContractNotFound
+	}
+
+	return nil
+}

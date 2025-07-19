@@ -18,6 +18,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/api/contracts", controllers.GetContracts)
 	router.GET("/api/contracts/date-range", controllers.GetContractsByDateRange)
 	router.PUT("/api/contracts/:id", controllers.EditContract)
+	router.DELETE("/api/contracts/:id", controllers.DeleteContract)
 	router.GET("/api/contracts/:id", controllers.GetContract)
 	router.GET("/api/contracts/:id/pdf", controllers.GeneratePDF)
 

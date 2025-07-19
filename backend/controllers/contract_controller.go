@@ -5,6 +5,7 @@ import (
 	"rental-contract-manager/database"
 	"rental-contract-manager/models"
 	"rental-contract-manager/utils"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -65,19 +66,45 @@ func CreateContract(c *gin.Context) {
 
 // EditContract handles the editing of an existing rental contract
 func EditContract(c *gin.Context) {
+	id := c.Param("id")
 	var contract models.Contract
 	if err := c.ShouldBindJSON(&contract); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Update the contract in the database (implementation not shown)
+	// Parse and set the ID from the URL parameter
+	contractID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid contract ID"})
+		return
+	}
+	contract.ID = uint(contractID)
+
+	// Update the contract in the database
 	if err := models.UpdateContract(&contract); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not update contract"})
 		return
 	}
 
 	c.JSON(http.StatusOK, contract)
+}
+
+// DeleteContract handles the deletion of an existing rental contract
+func DeleteContract(c *gin.Context) {
+	id := c.Param("id")
+
+	// Delete the contract from the database
+	if err := models.DeleteContract(id); err != nil {
+		if err == models.ErrContractNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Contract not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not delete contract"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Contract deleted successfully"})
 }
 
 // GetContracts retrieves all rental contracts

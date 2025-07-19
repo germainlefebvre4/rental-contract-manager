@@ -14,7 +14,7 @@ import {
   Separator,
   DropdownMenu
 } from '@radix-ui/themes';
-import { getContracts, createContract, getProducts, getUsers, createUser } from '../../services/api';
+import { getContracts, createContract, getProducts, getUsers, createUser, updateContract, deleteContract } from '../../services/api';
 import { generatePDF } from '../../services/pdf';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { Contract, Product, User, ContractPDFData } from '../../types';
@@ -57,6 +57,9 @@ const ContractPage: React.FC = () => {
   });
   const [errors, setErrors] = useState<any>({});
   const [renterErrors, setRenterErrors] = useState<any>({});
+  const [editDialogOpen, setEditDialogOpen] = useState<boolean>(false);
+  const [editingContract, setEditingContract] = useState<Contract | null>(null);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
 
   useEffect(() => {
     fetchData();
@@ -340,6 +343,99 @@ const ContractPage: React.FC = () => {
     setViewDialogOpen(true);
   };
 
+  const handleEditContract = (contract: Contract) => {
+    setEditingContract(contract);
+    setNewContract({
+      productId: contract.productId,
+      startDate: contract.startDate.split('T')[0],
+      endDate: contract.endDate.split('T')[0],
+      retrievalStartDate: contract.retrievalStartDate?.split('T')[0] || '',
+      retrievalEndDate: contract.retrievalEndDate?.split('T')[0] || '',
+      status: contract.status
+    });
+    setIsEditing(true);
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateContract = async () => {
+    if (!editingContract) return;
+    
+    try {
+      // Validate contract fields
+      const contractErrors: Record<string, string> = {};
+      if (!newContract.productId) contractErrors.productId = 'Product is required';
+      if (!newContract.startDate) contractErrors.startDate = 'Usage start date is required';
+      if (!newContract.endDate) contractErrors.endDate = 'Usage end date is required';
+      if (!newContract.retrievalStartDate) contractErrors.retrievalStartDate = 'Retrieval start date is required';
+      if (!newContract.retrievalEndDate) contractErrors.retrievalEndDate = 'Retrieval end date is required';
+      
+      if (Object.keys(contractErrors).length > 0) {
+        setErrors(contractErrors);
+        return;
+      }
+
+      const totalPrice = calculateTotalPrice(
+        newContract.productId as string, 
+        newContract.startDate as string, 
+        newContract.endDate as string
+      );
+
+      const durationInDays = calculateRentalDuration(
+        newContract.startDate as string,
+        newContract.endDate as string
+      );
+
+      // Set all dates as datetime
+      const start = new Date(newContract.startDate as string);
+      const end = new Date(newContract.endDate as string);
+      const retrievalStartDate = new Date(newContract.retrievalStartDate as string);
+      const retrievalEndDate = new Date(newContract.retrievalEndDate as string);
+      
+      const updatedContract = {
+        ...editingContract,
+        ...newContract,
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        retrievalStartDate: retrievalStartDate.toISOString(),
+        retrievalEndDate: retrievalEndDate.toISOString(),
+        totalPrice,
+        totalAmount: totalPrice,
+        durationDays: durationInDays
+      };
+
+      await updateContract(editingContract.id, updatedContract);
+      
+      // Update the contract in the local state
+      setContracts(prev => prev.map(contract => 
+        contract.id === editingContract.id 
+          ? { ...contract, ...updatedContract }
+          : contract
+      ));
+      
+      setEditDialogOpen(false);
+      setIsEditing(false);
+      setEditingContract(null);
+      resetForm();
+    } catch (error) {
+      console.error('Error updating contract:', error);
+    }
+  };
+
+  const handleDeleteContract = async (contract: Contract) => {
+    if (!confirm(`Are you sure you want to delete contract ${contract.id}?`)) {
+      return;
+    }
+    
+    try {
+      await deleteContract(contract.id);
+      
+      // Remove the contract from the local state
+      setContracts(prev => prev.filter(c => c.id !== contract.id));
+    } catch (error) {
+      console.error('Error deleting contract:', error);
+    }
+  };
+
   const handleGeneratePDF = async () => {
     if (!selectedContract || !selectedContract.product || !selectedContract.user) return;
     
@@ -521,13 +617,17 @@ const ContractPage: React.FC = () => {
                             </Button>
                           </DropdownMenu.Trigger>
                           <DropdownMenu.Content>
-                            <DropdownMenu.Item key="edit">Edit</DropdownMenu.Item>
+                            <DropdownMenu.Item key="edit" onClick={() => handleEditContract(contract)}>
+                              Edit
+                            </DropdownMenu.Item>
                             <DropdownMenu.Item key="change-status">Change Status</DropdownMenu.Item>
                             <DropdownMenu.Item key="generate-pdf" onClick={() => handleViewContract(contract)}>
                               Generate PDF
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator />
-                            <DropdownMenu.Item key="cancel" color="red">Cancel</DropdownMenu.Item>
+                            <DropdownMenu.Item key="delete" color="red" onClick={() => handleDeleteContract(contract)}>
+                              Delete
+                            </DropdownMenu.Item>
                           </DropdownMenu.Content>
                         </DropdownMenu.Root>
                       </Flex>
@@ -826,6 +926,118 @@ const ContractPage: React.FC = () => {
             </Dialog.Close>
             <Button onClick={handleSubmit}>
               Create Contract
+            </Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
+
+      {/* Edit Contract Dialog */}
+      <Dialog.Root open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <Dialog.Content style={{ maxWidth: 700 }}>
+          <Dialog.Title>Edit Contract</Dialog.Title>
+          
+          <Flex direction="column" gap="4" mt="4">
+            {/* Product Selection */}
+            <Box>
+              <Text size="2" weight="bold" mb="2">Product Information</Text>
+              <Select.Root value={newContract.productId || ''} onValueChange={handleProductChange}>
+                <Select.Trigger placeholder="Select a product" />
+                <Select.Content>
+                  {products.map((product) => (
+                    <Select.Item key={product.id} value={product.id}>
+                      {product.object} - {product.brand} {product.model}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select.Root>
+              {errors.productId && <Text size="1" color="red">{errors.productId}</Text>}
+            </Box>
+
+            <Separator />
+
+            {/* Contract Details */}
+            <Box>
+              <Text size="2" weight="bold" mb="2">Contract Details</Text>
+              <Flex direction="column" gap="3">
+                <Flex gap="3">
+                  <Box style={{ flex: 1 }}>
+                    <Text size="1" color="gray" mb="1">Usage Start Date</Text>
+                    <TextField.Root
+                      type="date"
+                      name="startDate"
+                      value={newContract.startDate || ''}
+                      onChange={handleInputChange}
+                      placeholder="Usage start date"
+                    />
+                    {errors.startDate && <Text size="1" color="red">{errors.startDate}</Text>}
+                  </Box>
+                  <Box style={{ flex: 1 }}>
+                    <Text size="1" color="gray" mb="1">Usage End Date</Text>
+                    <TextField.Root
+                      type="date"
+                      name="endDate"
+                      value={newContract.endDate || ''}
+                      onChange={handleInputChange}
+                      placeholder="Usage end date"
+                    />
+                    {errors.endDate && <Text size="1" color="red">{errors.endDate}</Text>}
+                  </Box>
+                </Flex>
+
+                <Flex gap="3">
+                  <Box style={{ flex: 1 }}>
+                    <Text size="1" color="gray" mb="1">Retrieval Start Date</Text>
+                    <TextField.Root
+                      type="date"
+                      name="retrievalStartDate"
+                      value={newContract.retrievalStartDate || ''}
+                      onChange={handleInputChange}
+                      placeholder="Retrieval start date"
+                    />
+                    {errors.retrievalStartDate && <Text size="1" color="red">{errors.retrievalStartDate}</Text>}
+                  </Box>
+                  <Box style={{ flex: 1 }}>
+                    <Text size="1" color="gray" mb="1">Retrieval End Date</Text>
+                    <TextField.Root
+                      type="date"
+                      name="retrievalEndDate"
+                      value={newContract.retrievalEndDate || ''}
+                      onChange={handleInputChange}
+                      placeholder="Retrieval end date"
+                    />
+                    {errors.retrievalEndDate && <Text size="1" color="red">{errors.retrievalEndDate}</Text>}
+                  </Box>
+                </Flex>
+
+                <Box>
+                  <Text size="1" color="gray" mb="1">Status</Text>
+                  <Select.Root value={newContract.status || ''} onValueChange={(value) => handleInputChange({ target: { name: 'status', value } } as any)}>
+                    <Select.Trigger placeholder="Select status" />
+                    <Select.Content>
+                      <Select.Item value="Pending">Pending</Select.Item>
+                      <Select.Item value="Active">Active</Select.Item>
+                      <Select.Item value="Completed">Completed</Select.Item>
+                      <Select.Item value="Cancelled">Cancelled</Select.Item>
+                    </Select.Content>
+                  </Select.Root>
+                </Box>
+              </Flex>
+            </Box>
+          </Flex>
+
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray" onClick={() => {
+                setEditDialogOpen(false);
+                setIsEditing(false);
+                setEditingContract(null);
+                resetForm();
+              }}>
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button onClick={handleUpdateContract}>
+              Update Contract
             </Button>
           </Flex>
         </Dialog.Content>

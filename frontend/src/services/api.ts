@@ -55,6 +55,15 @@ export const getContracts = async (): Promise<Contract[]> => {
   return response.data;
 };
 
+export const updateContract = async (id: string, contract: Partial<Contract>): Promise<Contract> => {
+  const response = await api.put(`/contracts/${id}`, contract);
+  return response.data;
+};
+
+export const deleteContract = async (id: string): Promise<void> => {
+  await api.delete(`/contracts/${id}`);
+};
+
 export const getContractsByDateRange = async (start: Date, end: Date): Promise<Contract[]> => {
   const startStr = start.toISOString().split('T')[0];
   const endStr = end.toISOString().split('T')[0];
