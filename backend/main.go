@@ -77,7 +77,7 @@ func seedDatabase(db *gorm.DB) error {
 
 func main() {
 	// Load configuration
-	config.LoadConfig()
+	cfg := config.LoadConfig()
 
 	// Initialize database
 	initializeDatabase()
@@ -91,6 +91,6 @@ func main() {
 	// Set up routes
 	routes.SetupRoutes(router)
 
-	// Start the server
-	router.Run(":8080")
+	// Start the server on the configured port
+	router.Run(":" + cfg.Port)
 }
