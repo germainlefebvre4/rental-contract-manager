@@ -1,0 +1,39 @@
+---
+name: rental-contract-manager
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres://rent4goods:rent4goods@database:5432/rent4goods?sslmode=disable
+      - PORT=8000
+      # - JWT_SECRET=your_jwt_secret_change_in_production
+      # - CORS_ORIGIN=http://localhost:3000
+    depends_on:
+      - database
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: rent4goods
+      POSTGRES_PASSWORD: rent4goods
+      POSTGRES_DB: rent4goods
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:

@@ -41,6 +41,24 @@ pnpm install
 pnpm start
 ```
 
+### Using `make` (recommended)
+
+Once the database is running (`docker compose up -d`), a root `Makefile` provides shortcuts to start the backend and frontend without juggling multiple terminals manually:
+
+```bash
+make dev           # starts backend and frontend together, stops both on Ctrl+C
+make dev-backend   # starts only the backend
+make dev-frontend  # starts only the frontend
+```
+
+The backend and frontend ports are configurable independently via the `API_PORT` (default `8000`) and `FRONTEND_PORT` (default `3000`) variables. The frontend automatically calls the backend on whichever `API_PORT` it was started with:
+
+```bash
+FRONTEND_PORT=5172 API_PORT=8080 make dev
+```
+
+These variables only affect the environment of the processes launched by `make`; `backend/.env` and `frontend/.env` are never modified.
+
 ## Project Structure
 
 The project is divided into two main parts: the backend and the frontend.
